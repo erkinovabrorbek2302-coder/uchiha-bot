@@ -99,7 +99,7 @@ O'zbek tilida javob ber, agar foydalanuvchi boshqa tilda yozsa, o'sha tilda javo
 
 
 def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).updater(None).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
