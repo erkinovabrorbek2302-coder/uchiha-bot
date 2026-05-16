@@ -2,3 +2,10 @@ python-telegram-bot==20.7
 groq
 apscheduler==3.6.3
 pytz
+yt-dlp
+httpx
+edge-tts
+openai
+tavily-python
+Pillow
+aiohttp
