@@ -1,11 +1,13 @@
 python-telegram-bot==20.7
 groq
 apscheduler==3.6.3
-pytz
-yt-dlp
+yt_dlp
+logging
 httpx
-edge-tts
-openai
-tavily-python
-Pillow
-aiohttp
+tempfile
+subprocess
+edge_tts
+os
+requests as req
+urllib.parse
+base64
