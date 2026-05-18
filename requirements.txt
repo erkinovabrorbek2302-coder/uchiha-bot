@@ -8,6 +8,6 @@ tempfile
 subprocess
 edge_tts
 os
-requests as req
+requests
 urllib.parse
 base64
