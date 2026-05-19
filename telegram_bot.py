@@ -212,9 +212,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(
             "🎵 Qo'shiq nomini yozing!\n\n"
             "Masalan:\n"
-            "• *Mondagem Peregiza*\n"
-            "• *java dunyo sening togangmas*\n"
-            "• *Stromae Papaoutai*",
+            "• *Mondagem Peregiza music*\n"
+            "• *java dunyo sening togangmas music*\n"
+            "• *Stromae Papaoutai music*"
+            "oxiriga music deb yozilishi shart",
             parse_mode="Markdown"
         )
 
