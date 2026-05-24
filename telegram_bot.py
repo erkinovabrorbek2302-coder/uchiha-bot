@@ -47,7 +47,6 @@ client = Groq(api_key=GROQ_API_KEY)
 conversation_history = {}
 last_image_prompt = {}
 user_state = {}
-typo_correction = {}
 
 
 async def _detect_intent(user_message: str) -> str:
@@ -71,35 +70,6 @@ Shaxs, qahramon, anime, kino qahramoni nomi + rasm so'rovi — rasm."""
     if "rasm" in intent:
         return "rasm"
     return "chat"
-
-
-async def _check_typo(user_message: str) -> str | None:
-    """Imlo xatosini tekshiradi, faqat aniq xato bo'lsa to'g'ri variantni qaytaradi"""
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {
-                "role": "system",
-                "content": """Foydalanuvchi xabarida ANIQ va OCHIQ imlo xatosi borligini tekshir.
-Qoidalar:
-- Faqat haqiqiy yozuv xatolarini to'g'irla (masalan: "narotu" -> "naruto", "privet" -> "salom" emas)
-- Agar gap to'g'ri yozilgan bo'lsa — "ok" yoz
-- Agar gap ma'nosiz emas, faqat biroz noto'g'ri yozilgan bo'lsa — "ok" yoz  
-- Faqat harflar aralashib ketgan, so'z noto'g'ri yozilgan hollarda to'g'rilangan variantni yoz
-- "ok" yoki to'g'rilangan matnni yoz, boshqa hech narsa yozma"""
-            },
-            {"role": "user", "content": user_message}
-        ],
-        max_tokens=100
-    )
-    result = response.choices[0].message.content.strip()
-    if result.lower() == "ok":
-        return None
-    # Agar javob original matndan 20% dan kam farq qilsa, xato emas
-    if len(result) > 0 and abs(len(result) - len(user_message)) / max(len(user_message), 1) < 0.2:
-        if result.lower() == user_message.lower():
-            return None
-    return result
 
 
 async def _create_image_prompt(query: str) -> str:
@@ -295,17 +265,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ForceReply(selective=True)
         )
 
-    elif data == "typo_ha":
-        corrected = typo_correction.get(user_id)
-        if corrected:
-            typo_correction.pop(user_id, None)
-            msg = await query.message.reply_text("⏳ Javob tayyorlanmoqda...")
-            await _process_chat(query.message, corrected, user_id, msg)
-
-    elif data == "typo_yoq":
-        typo_correction.pop(user_id, None)
-        await query.message.reply_text("Tushunarli, davom eting 👍")
-
 
 async def _process_chat(message, user_message: str, user_id: int, msg=None):
     try:
@@ -323,13 +282,13 @@ async def _process_chat(message, user_message: str, user_id: int, msg=None):
 
 Qoidalar:
 - Foydalanuvchi qaysi tilda yozsa, o'sha tilda javob ber
-- Javoblarni to'liq, aniq va tushunarli yoz — juda qisqa qilma
+- Javoblarni to'liq, aniq va tushunarli yoz
+- Agar foydalanuvchi so'zni noto'g'ri yozsa, o'zin tushunib to'g'ri javob ber
 - O'zingni faqat so'ralganda tanishdir
 - Yaratuvchi haqida faqat so'ralganda: Instagram @sung_jinwoo.2010, tel: +998 94 337 60 08
 - Emojilarni o'rinli ishlat, ko'p ishlatma
 - HTML so'rasa: ```html ... ``` ichida yoz
 - Python so'rasa: ```python ... ``` ichida yoz, input() ishlatma
-- Savollarga to'liq javob ber, kerakli ma'lumotlarni tushuntir
 {internet_info}"""
             }
         ]
@@ -412,8 +371,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             result = await _analyze_photo(image_base64, update.message.caption)
             last_image_prompt[user_id] = update.message.caption
 
-            # Agar prompt bo'lsa rasm chiz
-            if any(word in update.message.caption.lower() for word in ["chiz", "yarat", "qil", "o'zgartir", "tahrir", "ko'rsat"]):
+            if any(word in update.message.caption.lower() for word in ["chiz", "yarat", "qil", "o'zgartir", "tahrir", "ko'rsat", "yashat", "boshqa"]):
                 encoded = urllib.parse.quote(result)
                 image_url = (
                     f"https://image.pollinations.ai/prompt/{encoded}"
@@ -532,7 +490,6 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = transcription.text
     user_id = update.effective_user.id
 
-    # Qaysi tilda gapirganini aniqlash
     lang_response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
@@ -622,21 +579,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.chat.send_action("typing")
-
-    # Imlo xatosini tekshirish
-    corrected = await _check_typo(user_message)
-    if corrected and corrected.lower() != user_message.lower():
-        typo_correction[user_id] = corrected
-        keyboard = [[
-            InlineKeyboardButton("✅ Ha", callback_data="typo_ha"),
-            InlineKeyboardButton("❌ Yo'q", callback_data="typo_yoq"),
-        ]]
-        await update.message.reply_text(
-            f"Siz shuni demoqchimidingiz:\n*{corrected}*",
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return
 
     intent = await _detect_intent(user_message)
 
