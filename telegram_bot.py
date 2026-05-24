@@ -74,16 +74,19 @@ Shaxs, qahramon, anime, kino qahramoni nomi + rasm so'rovi — rasm."""
 
 
 async def _check_typo(user_message: str) -> str | None:
-    """Imlo xatosini tekshiradi, xato bo'lsa to'g'ri variantni qaytaradi"""
+    """Imlo xatosini tekshiradi, faqat aniq xato bo'lsa to'g'ri variantni qaytaradi"""
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
             {
                 "role": "system",
-                "content": """Foydalanuvchi xabarida imlo yoki yozuv xatosi borligini tekshir.
-Agar xato bo'lsa, to'g'rilangan variantni yoz.
-Agar xato yo'q bo'lsa, faqat "ok" yoz.
-Faqat to'g'rilangan matnni yoz, hech qanday izoh qo'shma."""
+                "content": """Foydalanuvchi xabarida ANIQ va OCHIQ imlo xatosi borligini tekshir.
+Qoidalar:
+- Faqat haqiqiy yozuv xatolarini to'g'irla (masalan: "narotu" -> "naruto", "privet" -> "salom" emas)
+- Agar gap to'g'ri yozilgan bo'lsa — "ok" yoz
+- Agar gap ma'nosiz emas, faqat biroz noto'g'ri yozilgan bo'lsa — "ok" yoz  
+- Faqat harflar aralashib ketgan, so'z noto'g'ri yozilgan hollarda to'g'rilangan variantni yoz
+- "ok" yoki to'g'rilangan matnni yoz, boshqa hech narsa yozma"""
             },
             {"role": "user", "content": user_message}
         ],
@@ -92,6 +95,10 @@ Faqat to'g'rilangan matnni yoz, hech qanday izoh qo'shma."""
     result = response.choices[0].message.content.strip()
     if result.lower() == "ok":
         return None
+    # Agar javob original matndan 20% dan kam farq qilsa, xato emas
+    if len(result) > 0 and abs(len(result) - len(user_message)) / max(len(user_message), 1) < 0.2:
+        if result.lower() == user_message.lower():
+            return None
     return result
 
 
