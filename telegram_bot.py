@@ -46,8 +46,8 @@ client = Groq(api_key=GROQ_API_KEY)
 
 conversation_history = {}
 last_image_prompt = {}
-music_search_results = {}
 user_state = {}
+typo_correction = {}
 
 
 async def _detect_intent(user_message: str) -> str:
@@ -56,14 +56,12 @@ async def _detect_intent(user_message: str) -> str:
         messages=[
             {
                 "role": "system",
-                "content": """Foydalanuvchi xabarining niyatini aniqla. Faqat bitta so'z yoz va so'zlaringda xato qilma xato qilmasdan yoz.
-chatda foydalanuvchi nimani yoqtirishi qanday tartibda yozishi va chatda nimalarni yozganini eslab qol va shu tariqa javob ber.foydalanuvchiga javob berayotganda xato qilmasdan yoz so'zlaringni.:
-- "rasm" — agar rasm chizish,rasm,
-- "musiqa" — agar qo'shiq, musiqa, audio so'ralsa  
+                "content": """Foydalanuvchi xabarining niyatini aniqla. Faqat bitta so'z yoz:
+- "rasm" — agar rasm chizish, ko'rsatish, tasvirlash so'ralsa
 - "chat" — boshqa barcha holatlarda
 
 Muhim: "kim yaratgan", "sen kim", "nima qila olasan" kabi savollar — chat.
-Shaxs yoki qahramon nomi + rasm so'rovi — rasm."""
+Shaxs, qahramon, anime, kino qahramoni nomi + rasm so'rovi — rasm."""
             },
             {"role": "user", "content": user_message}
         ],
@@ -72,15 +70,35 @@ Shaxs yoki qahramon nomi + rasm so'rovi — rasm."""
     intent = response.choices[0].message.content.strip().lower()
     if "rasm" in intent:
         return "rasm"
-    elif "musiqa" in intent:
-        return "musiqa"
     return "chat"
+
+
+async def _check_typo(user_message: str) -> str | None:
+    """Imlo xatosini tekshiradi, xato bo'lsa to'g'ri variantni qaytaradi"""
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {
+                "role": "system",
+                "content": """Foydalanuvchi xabarida imlo yoki yozuv xatosi borligini tekshir.
+Agar xato bo'lsa, to'g'rilangan variantni yoz.
+Agar xato yo'q bo'lsa, faqat "ok" yoz.
+Faqat to'g'rilangan matnni yoz, hech qanday izoh qo'shma."""
+            },
+            {"role": "user", "content": user_message}
+        ],
+        max_tokens=100
+    )
+    result = response.choices[0].message.content.strip()
+    if result.lower() == "ok":
+        return None
+    return result
 
 
 async def _create_image_prompt(query: str) -> str:
     try:
-        search_results = tavily_client.search(query, max_results=3)
-        search_info = " ".join([r["content"][:400] for r in search_results["results"]])
+        search_results = tavily_client.search(query, max_results=5)
+        search_info = " ".join([r["content"][:600] for r in search_results["results"]])
     except:
         search_info = query
 
@@ -92,10 +110,11 @@ async def _create_image_prompt(query: str) -> str:
                 "content": """Sen dunyodagi eng yaxshi Stable Diffusion prompt yozuvchisan.
 Qoidalar:
 - FAQAT inglizcha yoz
+- Agar taniqli qahramon, anime, kino, serial, o'yin qahramoni bo'lsa — internet ma'lumotidan foydalanib uning AYNAN o'ziga xos: soch rangi va uslubi, ko'z rangi, kiyim, qurol, belgi-alomatlarini BATAFSIL yoz
 - Juda batafsil: rang, kiyim, yuz, soch, ko'z, fon, yoritish, atmosfera
-- Agar taniqli qahramon/shaxs bo'lsa — uning ANIQ tashqi ko'rinishini yoz
-- Yuqori sifat uchun qo'sh: "ultra detailed, 8k uhd, masterpiece, sharp focus, professional photography, vibrant colors, no blur, crystal clear"
-- Yuz aniq ko'rinsin: "detailed face, perfect facial features, clear eyes"
+- Yuqori sifat uchun: "ultra detailed, 8k uhd, masterpiece, sharp focus, cinematic lighting, vibrant colors, no blur, crystal clear, highly realistic"
+- Yuz aniq ko'rinsin: "detailed face, perfect facial features, clear eyes, sharp details"
+- Fon ham chiroyli bo'lsin: "beautiful detailed background, cinematic atmosphere"
 - FAQAT promptni yoz, hech qanday izoh yozma"""
             },
             {
@@ -103,7 +122,7 @@ Qoidalar:
                 "content": f"So'rov: {query}\nInternet ma'lumoti: {search_info}"
             }
         ],
-        max_tokens=400
+        max_tokens=600
     )
     return response.choices[0].message.content.strip()
 
@@ -146,9 +165,9 @@ async def _generate_and_send_image(message, query: str, msg, user_id: int):
 
 async def _analyze_photo(image_base64: str, caption: str = None) -> str:
     if caption:
-        prompt_text = f"Bu rasmni ko'r va '{caption}' uslubida yangi rasm uchun ultra-detailed inglizcha Stable Diffusion prompt yoz. Ranglar, kiyim, fon, yoritish, atmosfera — hammasini yoz. FAQAT promptni yoz."
+        prompt_text = f"Bu rasmni ko'r va '{caption}' so'roviga qarab nima qilish kerakligini hal qil. Agar yangi rasm chizish so'ralsa — ultra-detailed inglizcha Stable Diffusion prompt yoz. Agar tahrirlash so'ralsa — tahrirlangan rasm uchun prompt yoz. Agar misol yoki tavsif so'ralsa — o'zbek tilida tushuntir. FAQAT kerakli natijani yoz."
     else:
-        prompt_text = "Bu rasmni batafsil tavsifla. Agar taniqli qahramon, kino, serial, o'yin, shaxs bo'lsa — nomini top. O'zbek tilida yoz."
+        prompt_text = "Bu rasmni batafsil tavsifla. Agar taniqli qahramon, anime, kino, serial, o'yin, shaxs bo'lsa — nomini top va batafsil tavsifla. O'zbek tilida yoz."
 
     result = client.chat.completions.create(
         model="meta-llama/llama-4-scout-17b-16e-instruct",
@@ -161,7 +180,7 @@ async def _analyze_photo(image_base64: str, caption: str = None) -> str:
                 ]
             }
         ],
-        max_tokens=500
+        max_tokens=600
     )
     return result.choices[0].message.content.strip()
 
@@ -173,15 +192,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
             InlineKeyboardButton("🎨 Rasm chizish", callback_data="menu_rasm"),
-            InlineKeyboardButton("🎵 Musiqa", callback_data="menu_music"),
-        ],
-        [
             InlineKeyboardButton("🎬 Video yuklash", callback_data="menu_video"),
-            InlineKeyboardButton("🧠 AI chat", callback_data="menu_chat"),
         ],
         [
+            InlineKeyboardButton("🧠 AI chat", callback_data="menu_chat"),
             InlineKeyboardButton("🗑️ Tarixni tozalash", callback_data="menu_clear"),
-            InlineKeyboardButton("❓ Yordam", callback_data="menu_help"),
         ],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -191,7 +206,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👥 {len(user_list)} ta foydalanuvchi\n\n"
         "🤖 *Uchiha Bot imkoniyatlari:*\n\n"
         "🎨 *Rasm chizish* — har qanday rasm, qahramon, shaxs\n"
-        "🎵 *Musiqa* — qo'shiq topib mp3 yuklab beradi\n"
         "🎬 *Video* — YouTube videolarini yuklab beradi\n"
         "🧠 *AI chat* — har qanday savolga javob beradi\n"
         "🔊 *Ovozli chat* — ovozli xabarga javob qaytaradi\n"
@@ -214,19 +228,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Masalan:\n"
             "• *tezkor mashina*\n"
             "• *chiroyli tog' manzarasi*\n"
-            "• *Eiffel Tower kechasi*\n"
-            "• *bo'ri va oy*",
-            parse_mode="Markdown"
-        )
-
-    elif data == "menu_music":
-        await query.message.reply_text(
-            "🎵 Qo'shiq nomini yozing!\n\n"
-            "Masalan:\n"
-            "• *Mondagem Peregiza music*\n"
-            "• *java dunyo sening togangmas music*\n"
-            "• *Stromae Papaoutai music*\n"
-            "oxiriga music deb yozilishi shart",
+            "• *Naruto*\n"
+            "• *Spider-Man*",
             parse_mode="Markdown"
         )
 
@@ -247,41 +250,18 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data == "menu_clear":
-        conversation_history[user_id] = []
+        conversation_history.pop(user_id, None)
         await query.message.reply_text("✅ Suhbat tarixi tozalandi!")
-
-    elif data == "menu_help":
-        keyboard = [[InlineKeyboardButton("🏠 Asosiy menyu", callback_data="menu_main")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.message.reply_text(
-            "🤖 *Uchiha Bot — Yordam*\n\n"
-            "📌 *Buyruqlar:*\n"
-            "/start — Asosiy menyu\n"
-            "/clear — Suhbat tarixini tozalash\n"
-            "/rasm [tavsif] — Rasm chizish\n"
-            "/video [link] — YouTube video yuklash\n\n"
-            "💡 *Maslahatlar:*\n"
-            "• Qo'shiq nomi yozsang — musiqa topadi\n"
-            "• Rasm yuborsang — tahlil qiladi\n"
-            "• Rasm + matn yuborsang — o'zgartiradi\n"
-            "• Ovozli xabar yuborsang — ovozli javob beradi",
-            parse_mode="Markdown",
-            reply_markup=reply_markup
-        )
 
     elif data == "menu_main":
         keyboard = [
             [
                 InlineKeyboardButton("🎨 Rasm chizish", callback_data="menu_rasm"),
-                InlineKeyboardButton("🎵 Musiqa", callback_data="menu_music"),
-            ],
-            [
                 InlineKeyboardButton("🎬 Video yuklash", callback_data="menu_video"),
-                InlineKeyboardButton("🧠 AI chat", callback_data="menu_chat"),
             ],
             [
+                InlineKeyboardButton("🧠 AI chat", callback_data="menu_chat"),
                 InlineKeyboardButton("🗑️ Tarixni tozalash", callback_data="menu_clear"),
-                InlineKeyboardButton("❓ Yordam", callback_data="menu_help"),
             ],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -302,55 +282,105 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Masalan:\n"
             "• Qora-oq qilib\n"
             "• Kuchli effektlar bilan\n"
-            "• Chiroyli fon bilan\n"
-            "• Rasmiy uslubda\n\n"
+            "• Chiroyli fon bilan\n\n"
             "Yozing 👇",
             parse_mode="Markdown",
             reply_markup=ForceReply(selective=True)
         )
 
-    elif data.startswith("music_dl_"):
-        idx = int(data.split("_")[2])
-        results = music_search_results.get(user_id, [])
-        if not results or idx >= len(results):
-            await query.message.reply_text("❌ Qo'shiq topilmadi.")
-            return
+    elif data == "typo_ha":
+        corrected = typo_correction.get(user_id)
+        if corrected:
+            typo_correction.pop(user_id, None)
+            msg = await query.message.reply_text("⏳ Javob tayyorlanmoqda...")
+            await _process_chat(query.message, corrected, user_id, msg)
 
-        song = results[idx]
-        msg = await query.message.reply_text(f"⬇️ *{song['title']}* yuklanmoqda...", parse_mode="Markdown")
+    elif data == "typo_yoq":
+        typo_correction.pop(user_id, None)
+        await query.message.reply_text("Tushunarli, davom eting 👍")
 
-        try:
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': f'music_{user_id}.%(ext)s',
-                'quiet': True,
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
+
+async def _process_chat(message, user_message: str, user_id: int, msg=None):
+    try:
+        search_results = tavily_client.search(user_message, max_results=3)
+        search_context = "\n".join([r["content"][:300] for r in search_results["results"]])
+        internet_info = f"\nInternet ma'lumoti:\n{search_context}\n"
+    except:
+        internet_info = ""
+
+    if user_id not in conversation_history:
+        conversation_history[user_id] = [
+            {
+                "role": "system",
+                "content": f"""Sen Uchiha Bot — aqlli, do'stona AI yordamchisan. Seni Erkinov Abrorbek (16 yosh) yaratgan.
+
+Qoidalar:
+- Foydalanuvchi qaysi tilda yozsa, o'sha tilda javob ber
+- Javoblarni to'liq, aniq va tushunarli yoz — juda qisqa qilma
+- O'zingni faqat so'ralganda tanishdir
+- Yaratuvchi haqida faqat so'ralganda: Instagram @sung_jinwoo.2010, tel: +998 94 337 60 08
+- Emojilarni o'rinli ishlat, ko'p ishlatma
+- HTML so'rasa: ```html ... ``` ichida yoz
+- Python so'rasa: ```python ... ``` ichida yoz, input() ishlatma
+- Savollarga to'liq javob ber, kerakli ma'lumotlarni tushuntir
+{internet_info}"""
             }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([song['url']])
+        ]
 
-            mp3_file = f'music_{user_id}.mp3'
-            with open(mp3_file, "rb") as audio:
-                await query.message.reply_audio(
-                    audio,
-                    title=song['title'],
-                    caption=f"🎵 {song['title']}"
-                )
-            os.remove(mp3_file)
+    conversation_history[user_id].append({"role": "user", "content": user_message})
+
+    if len(conversation_history[user_id]) > 31:
+        sys_msg = conversation_history[user_id][0]
+        conversation_history[user_id] = [sys_msg] + conversation_history[user_id][-30:]
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=conversation_history[user_id],
+            max_tokens=4096
+        )
+        assistant_reply = response.choices[0].message.content
+        conversation_history[user_id].append({"role": "assistant", "content": assistant_reply})
+
+        if "```html" in assistant_reply:
+            try:
+                html_code = assistant_reply.split("```html")[1].split("```")[0].strip()
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
+                    f.write(html_code)
+                    temp_file = f.name
+                with open(temp_file, 'rb') as doc:
+                    await message.reply_document(doc, filename="index.html", caption="🌐 Veb sayt fayli!")
+                os.remove(temp_file)
+                if msg:
+                    await msg.delete()
+                return
+            except Exception as e:
+                logger.error(f"HTML xatosi: {e}")
+
+        if msg:
             await msg.delete()
 
-        except Exception as e:
-            logger.error(f"Musiqa yuklash xatosi: {e}")
-            await msg.edit_text("❌ Qo'shiq yuklab bo'lmadi.")
+        try:
+            await message.reply_text(assistant_reply, parse_mode="Markdown")
+        except:
+            chunks = [assistant_reply[i:i+4000] for i in range(0, len(assistant_reply), 4000)]
+            for chunk in chunks:
+                try:
+                    await message.reply_text(chunk, parse_mode="Markdown")
+                except:
+                    await message.reply_text(chunk)
+
+    except Exception as e:
+        logger.error(f"Groq xatosi: {e}")
+        if msg:
+            await msg.edit_text("❌ Xato yuz berdi, qaytadan urinib ko'ring.")
+        else:
+            await message.reply_text("❌ Xato yuz berdi, qaytadan urinib ko'ring.")
 
 
 async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("❌ Tavsif yozing!\nMasalan: /rasm Sung Jinwoo")
+        await update.message.reply_text("❌ Tavsif yozing!\nMasalan: /rasm Naruto")
         return
     prompt = " ".join(context.args)
     user_id = update.effective_user.id
@@ -370,28 +400,37 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     image_base64 = base64.b64encode(image_data).decode('utf-8')
 
     if update.message.caption:
-        msg = await update.message.reply_text("🎨 Rasm o'zgartirilmoqda...")
+        msg = await update.message.reply_text("🎨 Rasm qayta ishlanmoqda...")
         try:
-            new_prompt = await _analyze_photo(image_base64, update.message.caption)
+            result = await _analyze_photo(image_base64, update.message.caption)
             last_image_prompt[user_id] = update.message.caption
 
-            encoded = urllib.parse.quote(new_prompt)
-            image_url = (
-                f"https://image.pollinations.ai/prompt/{encoded}"
-                f"?width=1024&height=1024&nologo=true&enhance=true&model=flux"
-            )
-            async with httpx.AsyncClient(timeout=120) as http_client:
-                img_response = await http_client.get(image_url)
+            # Agar prompt bo'lsa rasm chiz
+            if any(word in update.message.caption.lower() for word in ["chiz", "yarat", "qil", "o'zgartir", "tahrir", "ko'rsat"]):
+                encoded = urllib.parse.quote(result)
+                image_url = (
+                    f"https://image.pollinations.ai/prompt/{encoded}"
+                    f"?width=1024&height=1024&nologo=true&enhance=true&model=flux"
+                )
+                async with httpx.AsyncClient(timeout=120) as http_client:
+                    img_response = await http_client.get(image_url)
 
-            keyboard = [[
-                InlineKeyboardButton("🔄 Qayta chizish", callback_data="rasm_qayta"),
-                InlineKeyboardButton("✏️ O'zgartirish", callback_data="rasm_ozgartir"),
-            ]]
-            await update.message.reply_photo(
-                img_response.content,
-                caption=f"🖼️ {update.message.caption}",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+                keyboard = [[
+                    InlineKeyboardButton("🔄 Qayta chizish", callback_data="rasm_qayta"),
+                    InlineKeyboardButton("✏️ O'zgartirish", callback_data="rasm_ozgartir"),
+                ]]
+                await update.message.reply_photo(
+                    img_response.content,
+                    caption=f"🖼️ {update.message.caption}",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            else:
+                keyboard = [[
+                    InlineKeyboardButton("🎨 Rasm chizish", callback_data="rasm_qayta"),
+                    InlineKeyboardButton("✏️ O'zgartirish", callback_data="rasm_ozgartir"),
+                ]]
+                await update.message.reply_text(result, reply_markup=InlineKeyboardMarkup(keyboard))
+
             await msg.delete()
         except Exception as e:
             logger.error(f"Rasm tahrirlash xatosi: {e}")
@@ -471,70 +510,6 @@ async def analyze_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text("❌ Video tahlil qilib bo'lmadi.")
 
 
-async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE, query_text: str):
-    user_id = update.effective_user.id
-
-    try:
-        extraction = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Foydalanuvchi xabaridan faqat qo'shiq nomini ajratib ol. Masalan: 'menga java dunyo musiqasi kere' → 'java dunyo'. Faqat qo'shiq nomini yoz."
-                },
-                {"role": "user", "content": query_text}
-            ],
-            max_tokens=50
-        )
-        clean_query = extraction.choices[0].message.content.strip()
-    except:
-        clean_query = query_text
-
-    msg = await update.message.reply_text(f"🎵 *{clean_query}* qidirilmoqda...", parse_mode="Markdown")
-
-    try:
-        ydl_opts = {'quiet': True, 'extract_flat': True}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            results = ydl.extract_info(f"ytsearch10:{clean_query}", download=False)
-            entries = results.get('entries', [])[:10]
-
-        if not entries:
-            await msg.edit_text("❌ Qo'shiq topilmadi.")
-            return
-
-        music_search_results[user_id] = [
-            {
-                'title': e.get('title', 'Noma\'lum'),
-                'url': f"https://youtube.com/watch?v={e.get('id', '')}",
-                'duration': e.get('duration', 0)
-            }
-            for e in entries if e.get('id')
-        ]
-
-        text = f"🎵 *{clean_query}* natijalar:\n\n"
-        for i, song in enumerate(music_search_results[user_id]):
-            d = song.get('duration', 0)
-            t = f" `{int(d)//60}:{int(d)%60:02d}`" if d else ""
-            text += f"{i+1}. {song['title']}{t}\n"
-
-        keyboard = []
-        row = []
-        for i in range(len(music_search_results[user_id])):
-            row.append(InlineKeyboardButton(str(i+1), callback_data=f"music_dl_{i}"))
-            if len(row) == 5:
-                keyboard.append(row)
-                row = []
-        if row:
-            keyboard.append(row)
-
-        await msg.delete()
-        await update.message.reply_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    except Exception as e:
-        logger.error(f"Musiqa qidirish xatosi: {e}")
-        await msg.edit_text("❌ Qo'shiq qidirishda xato.")
-
-
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     voice_file = await context.bot.get_file(update.message.voice.file_id)
 
@@ -550,9 +525,30 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = transcription.text
     user_id = update.effective_user.id
 
+    # Qaysi tilda gapirganini aniqlash
+    lang_response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {
+                "role": "system",
+                "content": "Matnning tilini aniqla. Faqat til kodini yoz: 'uz' o'zbek, 'ru' rus, 'en' ingliz, 'other' boshqa til."
+            },
+            {"role": "user", "content": user_text}
+        ],
+        max_tokens=10
+    )
+    lang = lang_response.choices[0].message.content.strip().lower()
+
+    voice_map = {
+        "uz": "uz-UZ-SardorNeural",
+        "ru": "ru-RU-DmitryNeural",
+        "en": "en-US-GuyNeural",
+    }
+    voice = voice_map.get(lang, "en-US-GuyNeural")
+
     if user_id not in conversation_history:
         conversation_history[user_id] = [
-            {"role": "system", "content": "Sen Uchiha Bot — AI yordamchisisisan. O'zbek tilida qisqa va aniq javob ber."}
+            {"role": "system", "content": "Sen Uchiha Bot — aqlli AI yordamchisan. Foydalanuvchi qaysi tilda gapirsa o'sha tilda javob ber."}
         ]
 
     conversation_history[user_id].append({"role": "user", "content": user_text})
@@ -564,7 +560,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_text = response.choices[0].message.content
     conversation_history[user_id].append({"role": "assistant", "content": reply_text})
 
-    communicate = edge_tts.Communicate(reply_text, voice="en-US-GuyNeural")
+    communicate = edge_tts.Communicate(reply_text, voice=voice)
     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as out:
         await communicate.save(out.name)
         await update.message.reply_voice(voice=open(out.name, "rb"), caption=f"🎙️ {reply_text[:100]}...")
@@ -573,49 +569,33 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     os.unlink(out.name)
 
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("🏠 Asosiy menyu", callback_data="menu_main")]]
-    await update.message.reply_text(
-        "🤖 *Uchiha Bot — Yordam*\n\n"
-        "📌 *Buyruqlar:*\n"
-        "/start — Asosiy menyu\n"
-        "/clear — Suhbat tarixini tozalash\n"
-        "/rasm [tavsif] — Rasm chizish\n"
-        "/video [link] — YouTube video yuklash\n\n"
-        "💡 *Maslahatlar:*\n"
-        "• Qo'shiq nomi yozsang — musiqa topadi\n"
-        "• Rasm yuborsang — tahlil qiladi\n"
-        "• Rasm + matn yuborsang — o'zgartiradi\n"
-        "• Ovozli xabar yuborsang — ovozli javob beradi",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-
 async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    conversation_history[update.effective_user.id] = []
+    user_id = update.effective_user.id
+    conversation_history.pop(user_id, None)
     await update.message.reply_text("✅ Suhbat tarixi tozalandi!")
+
 
 async def foydalanuvchilar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ Bu buyruq faqat admin uchun!")
         return
-    
+
     if not user_list:
         await update.message.reply_text("👥 Hali foydalanuvchi yo'q.")
         return
-    
-    text = f"👥 *Jami: {len(user_list)} ta foydalanuvchi*\n\n"
+
+    text = f"👥 Jami: {len(user_list)} ta foydalanuvchi\n\n"
     for user_id in user_list:
         try:
             user = await context.bot.get_chat(user_id)
             name = user.full_name or "—"
             username = f"@{user.username}" if user.username else "—"
-            text += f"👤 {name}\n🔗 {username}\n🆔 `{user_id}`\n\n"
+            text += f"👤 {name}\n🔗 {username}\n🆔 {user_id}\n\n"
         except:
-            text += f"🆔 `{user_id}`\n\n"
-    
-    await update.message.reply_text
+            text += f"🆔 {user_id}\n\n"
+
+    await update.message.reply_text(text)
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_list.add(update.effective_user.id)
@@ -636,6 +616,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.chat.send_action("typing")
 
+    # Imlo xatosini tekshirish
+    corrected = await _check_typo(user_message)
+    if corrected and corrected.lower() != user_message.lower():
+        typo_correction[user_id] = corrected
+        keyboard = [[
+            InlineKeyboardButton("✅ Ha", callback_data="typo_ha"),
+            InlineKeyboardButton("❌ Yo'q", callback_data="typo_yoq"),
+        ]]
+        await update.message.reply_text(
+            f"Siz shuni demoqchimidingiz:\n*{corrected}*",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
     intent = await _detect_intent(user_message)
 
     if intent == "rasm":
@@ -643,76 +638,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _generate_and_send_image(update.message, user_message, msg, user_id)
         return
 
-    if intent == "musiqa":
-        await search_music(update, context, user_message)
-        return
-
-    try:
-        search_results = tavily_client.search(user_message, max_results=3)
-        search_context = "\n".join([r["content"][:300] for r in search_results["results"]])
-        internet_info = f"\nInternet ma'lumoti:\n{search_context}\n"
-    except:
-        internet_info = ""
-
-    if user_id not in conversation_history:
-        conversation_history[user_id] = [
-            {
-                "role": "system",
-                "content": f"""Sen Uchiha Bot — aqlli, do'stona AI yordamchisisisan. Seni Erkinov Abrorbek (16 yosh) yaratgan.
-
-Qoidalar:
-- O'zbek tilida gapirgin, boshqa tilda yozsa o'sha tilda javob ber
-- Qisqa, aniq va to'g'ri yoz
-- O'zingni faqat so'ralganda tanishdir
-- Yaratuvchi haqida faqat so'ralganda: Instagram @sung_jinwoo.2010, tel: +998 94 337 60 08
-- emojilar bilan ishla harakterga moslab emojilarni kop ishlatib yuborma
-- HTML so'rasa: ```html ... ``` ichida yoz
-- Python so'rasa: ```python ... ``` ichida yoz, input() ishlatma
-{internet_info}"""
-            }
-        ]
-
-    conversation_history[user_id].append({"role": "user", "content": user_message})
-
-    if len(conversation_history[user_id]) > 31:
-        sys_msg = conversation_history[user_id][0]
-        conversation_history[user_id] = [sys_msg] + conversation_history[user_id][-30:]
-
-    try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=conversation_history[user_id],
-            max_tokens=4096
-        )
-        assistant_reply = response.choices[0].message.content
-        conversation_history[user_id].append({"role": "assistant", "content": assistant_reply})
-
-        if "```html" in assistant_reply:
-            try:
-                html_code = assistant_reply.split("```html")[1].split("```")[0].strip()
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
-                    f.write(html_code)
-                    temp_file = f.name
-                with open(temp_file, 'rb') as doc:
-                    await update.message.reply_document(doc, filename="index.html", caption="🌐 Veb sayt fayli!")
-                os.remove(temp_file)
-                return
-            except Exception as e:
-                logger.error(f"HTML xatosi: {e}")
-
-        try:
-            await update.message.reply_text(assistant_reply, parse_mode="Markdown")
-        except:
-            chunks = [assistant_reply[i:i+4000] for i in range(0, len(assistant_reply), 4000)]
-            for chunk in chunks:
-                try:
-                    await update.message.reply_text(chunk, parse_mode="Markdown")
-                except:
-                    await update.message.reply_text(chunk)
-
-    except Exception as e:
-        logger.error(f"Groq xatosi: {e}")
-        await update.message.reply_text("❌ Xato yuz berdi, qaytadan urinib ko'ring.")
+    msg = await update.message.reply_text("⏳ Javob tayyorlanmoqda...")
+    await _process_chat(update.message, user_message, user_id, msg)
 
 
 # ===================== MAIN =====================
@@ -720,7 +647,6 @@ async def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("clear", clear_history))
     app.add_handler(CommandHandler("rasm", generate_image))
     app.add_handler(CommandHandler("video", download_video))
