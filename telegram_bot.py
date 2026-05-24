@@ -614,7 +614,7 @@ async def foydalanuvchilar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             text += f"🆔 `{user_id}`\n\n"
     
-    await update.message.reply_text(text, parse_mode="Markdown")
+    await update.message.reply_text
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_list.add(update.effective_user.id)
