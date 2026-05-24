@@ -56,7 +56,8 @@ async def _detect_intent(user_message: str) -> str:
         messages=[
             {
                 "role": "system",
-                "content": """Foydalanuvchi xabarining niyatini aniqla. Faqat bitta so'z yoz va so'zlari gda xato qilma xato qilmasdan yoz.:
+                "content": """Foydalanuvchi xabarining niyatini aniqla. Faqat bitta so'z yoz va so'zlaringda xato qilma xato qilmasdan yoz.
+chatda foydalanuvchi nimani yoqtirishi qanday tartibda yozishi va chatda nimalarni yozganini eslab qol va shu tariqa javob ber.foydalanuvchiga javob berayotganda xato qilmasdan yoz so'zlaringni.:
 - "rasm" — agar rasm chizish,rasm,
 - "musiqa" — agar qo'shiq, musiqa, audio so'ralsa  
 - "chat" — boshqa barcha holatlarda
