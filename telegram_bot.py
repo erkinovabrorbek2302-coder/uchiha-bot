@@ -4,6 +4,7 @@ import httpx
 import tempfile
 import edge_tts
 import os
+import asyncio
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -19,6 +20,7 @@ def run_health_server():
     port = int(os.getenv("PORT", 8080))
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
     server.serve_forever()
+
 import requests as req
 import urllib.parse
 import base64
@@ -48,9 +50,7 @@ music_search_results = {}
 user_state = {}
 
 
-# ===================== AI: NIYAT ANIQLASH =====================
 async def _detect_intent(user_message: str) -> str:
-    """Foydalanuvchi niyatini aniqlaydi: rasm / musiqa / chat"""
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
@@ -76,9 +76,7 @@ Shaxs yoki qahramon nomi + rasm so'rovi — rasm."""
     return "chat"
 
 
-# ===================== RASM PROMPT YARATISH =====================
 async def _create_image_prompt(query: str) -> str:
-    """Internetdan ma'lumot olib ultra-sifatli prompt yaratadi"""
     try:
         search_results = tavily_client.search(query, max_results=3)
         search_info = " ".join([r["content"][:400] for r in search_results["results"]])
@@ -145,7 +143,6 @@ async def _generate_and_send_image(message, query: str, msg, user_id: int):
         await msg.edit_text("❌ Rasm yaratishda xato yuz berdi.")
 
 
-# ===================== RASM TAHLIL =====================
 async def _analyze_photo(image_base64: str, caption: str = None) -> str:
     if caption:
         prompt_text = f"Bu rasmni ko'r va '{caption}' uslubida yangi rasm uchun ultra-detailed inglizcha Stable Diffusion prompt yoz. Ranglar, kiyim, fon, yoritish, atmosfera — hammasini yoz. FAQAT promptni yoz."
@@ -168,7 +165,6 @@ async def _analyze_photo(image_base64: str, caption: str = None) -> str:
     return result.choices[0].message.content.strip()
 
 
-# ===================== START =====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.effective_user.first_name
     user_list.add(update.effective_user.id)
@@ -205,7 +201,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ===================== CALLBACK HANDLER =====================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -229,7 +224,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Masalan:\n"
             "• *Mondagem Peregiza music*\n"
             "• *java dunyo sening togangmas music*\n"
-            "• *Stromae Papaoutai music*"
+            "• *Stromae Papaoutai music*\n"
             "oxiriga music deb yozilishi shart",
             parse_mode="Markdown"
         )
@@ -352,7 +347,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.edit_text("❌ Qo'shiq yuklab bo'lmadi.")
 
 
-# ===================== RASM YARATISH BUYRUG'I =====================
 async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("❌ Tavsif yozing!\nMasalan: /rasm Sung Jinwoo")
@@ -363,7 +357,6 @@ async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _generate_and_send_image(update.message, prompt, msg, user_id)
 
 
-# ===================== RASM YUBORILGANDA =====================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     photo = update.message.photo[-1]
@@ -416,7 +409,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.edit_text("❌ Rasm tahlil qilib bo'lmadi.")
 
 
-# ===================== VIDEO YUKLASH =====================
 async def download_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("❌ YouTube linki yozing!\nMasalan: /video https://youtube.com/shorts/xxx")
@@ -446,7 +438,6 @@ async def download_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text("❌ Video yuklab bo'lmadi.")
 
 
-# ===================== VIDEO TAHLIL =====================
 async def analyze_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("🎬 Video tahlil qilinmoqda...")
     try:
@@ -479,7 +470,6 @@ async def analyze_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text("❌ Video tahlil qilib bo'lmadi.")
 
 
-# ===================== MUSIQA QIDIRISH =====================
 async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE, query_text: str):
     user_id = update.effective_user.id
 
@@ -544,7 +534,6 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE, query
         await msg.edit_text("❌ Qo'shiq qidirishda xato.")
 
 
-# ===================== OVOZLI XABAR =====================
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     voice_file = await context.bot.get_file(update.message.voice.file_id)
 
@@ -583,7 +572,6 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     os.unlink(out.name)
 
 
-# ===================== HELP & CLEAR =====================
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("🏠 Asosiy menyu", callback_data="menu_main")]]
     await update.message.reply_text(
@@ -608,7 +596,6 @@ async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Suhbat tarixi tozalandi!")
 
 
-# ===================== ASOSIY XABAR =====================
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_list.add(update.effective_user.id)
     global message_count
@@ -616,7 +603,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_message = update.message.text
 
-    # Rasm edit holati
     if user_state.get(user_id) == "waiting_edit":
         user_state.pop(user_id)
         prompt = last_image_prompt.get(user_id, "")
@@ -629,7 +615,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.chat.send_action("typing")
 
-    # AI yordamida niyat aniqlash
     intent = await _detect_intent(user_message)
 
     if intent == "rasm":
@@ -641,7 +626,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await search_music(update, context, user_message)
         return
 
-    # Chat — internet + AI
     try:
         search_results = tavily_client.search(user_message, max_results=3)
         search_context = "\n".join([r["content"][:300] for r in search_results["results"]])
@@ -735,6 +719,6 @@ async def main():
         await app.updater.stop()
         await app.stop()
 
+
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
