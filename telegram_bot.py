@@ -16,11 +16,11 @@ ADMIN_ID = 164581954
 user_list = set()
 message_count = 0
 
-TAVILY_API_KEY = "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"
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 tavily_client = TavilyClient(api_key=TAVILY_API_KEY)
 
-TELEGRAM_TOKEN = "8287929918:AAFvepqgTJy04VgcO33CvNkVQ179sz-BDc4"
-GROQ_API_KEY = "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"
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
