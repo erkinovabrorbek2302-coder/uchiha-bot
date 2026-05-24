@@ -595,6 +595,26 @@ async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conversation_history[update.effective_user.id] = []
     await update.message.reply_text("✅ Suhbat tarixi tozalandi!")
 
+async def foydalanuvchilar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Bu buyruq faqat admin uchun!")
+        return
+    
+    if not user_list:
+        await update.message.reply_text("👥 Hali foydalanuvchi yo'q.")
+        return
+    
+    text = f"👥 *Jami: {len(user_list)} ta foydalanuvchi*\n\n"
+    for user_id in user_list:
+        try:
+            user = await context.bot.get_chat(user_id)
+            name = user.full_name or "—"
+            username = f"@{user.username}" if user.username else "—"
+            text += f"👤 {name}\n🔗 {username}\n🆔 `{user_id}`\n\n"
+        except:
+            text += f"🆔 `{user_id}`\n\n"
+    
+    await update.message.reply_text(text, parse_mode="Markdown")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_list.add(update.effective_user.id)
@@ -703,6 +723,7 @@ async def main():
     app.add_handler(CommandHandler("clear", clear_history))
     app.add_handler(CommandHandler("rasm", generate_image))
     app.add_handler(CommandHandler("video", download_video))
+    app.add_handler(CommandHandler("fy", foydalanuvchilar))
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.VIDEO, analyze_video))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
