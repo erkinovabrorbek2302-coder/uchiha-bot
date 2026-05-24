@@ -711,7 +711,7 @@ Qoidalar:
 
 
 # ===================== MAIN =====================
-def main():
+async def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -727,7 +727,14 @@ def main():
 
     threading.Thread(target=run_health_server, daemon=True).start()
     logger.info("Bot ishga tushdi! ✅")
-    app.run_polling()
+
+    async with app:
+        await app.start()
+        await app.updater.start_polling()
+        await asyncio.Event().wait()
+        await app.updater.stop()
+        await app.stop()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
