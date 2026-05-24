@@ -56,8 +56,8 @@ async def _detect_intent(user_message: str) -> str:
         messages=[
             {
                 "role": "system",
-                "content": """Foydalanuvchi xabarining niyatini aniqla. Faqat bitta so'z yoz:
-- "rasm" — agar rasm chizish, ko'rsatish, tasvirlash so'ralsa
+                "content": """Foydalanuvchi xabarining niyatini aniqla. Faqat bitta so'z yoz va so'zlari gda xato qilma xato qilmasdan yoz.:
+- "rasm" — agar rasm chizish,rasm,
 - "musiqa" — agar qo'shiq, musiqa, audio so'ralsa  
 - "chat" — boshqa barcha holatlarda
 
@@ -211,7 +211,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(
             "🎨 Qanday rasm kerak? Yozing!\n\n"
             "Masalan:\n"
-            "• *Sung Jinwoo*\n"
+            "• *tezkor mashina*\n"
             "• *chiroyli tog' manzarasi*\n"
             "• *Eiffel Tower kechasi*\n"
             "• *bo'ri va oy*",
@@ -664,7 +664,7 @@ Qoidalar:
 - Qisqa, aniq va to'g'ri yoz
 - O'zingni faqat so'ralganda tanishdir
 - Yaratuvchi haqida faqat so'ralganda: Instagram @sung_jinwoo.2010, tel: +998 94 337 60 08
-- Ko'p emoji ishlatma
+- emojilar bilan ishla harakterga moslab emojilarni kop ishlatib yuborma
 - HTML so'rasa: ```html ... ``` ichida yoz
 - Python so'rasa: ```python ... ``` ichida yoz, input() ishlatma
 {internet_info}"""
