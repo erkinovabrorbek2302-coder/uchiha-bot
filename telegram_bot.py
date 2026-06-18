@@ -183,7 +183,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👥 {len(user_list)} ta foydalanuvchi\n\n"
         "🤖 *Uchiha Bot imkoniyatlari:*\n\n"
         "🎨 *Rasm chizish* — har qanday rasm, qahramon, shaxs\n"
-        "🎬 *Video* — YouTube videolarini yuklab beradi\n"
         "🧠 *AI chat* — har qanday savolga javob beradi\n"
         "🔊 *Ovozli chat* — ovozli xabarga javob qaytaradi\n"
         "📷 *Rasm tahlil* — rasm yuborsang tahlil qiladi\n\n"
